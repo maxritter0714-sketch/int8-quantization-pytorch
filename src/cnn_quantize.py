@@ -345,7 +345,9 @@ def plot_cnn(rows: list[dict[str, object]], path: Path) -> None:
     for row in rows:
         by_method.setdefault(str(row["method"]), {})[int(row["batch_size"])] = row
 
-    accuracies = [float(by_method[method][next(iter(by_method[method]))]["accuracy"]) for method in methods]
+    accuracies = [
+        float(by_method[method][next(iter(by_method[method]))]["accuracy"]) for method in methods
+    ]
     batch_sizes = sorted({int(row["batch_size"]) for row in rows})
 
     fig, axes = plt.subplots(1, 2, figsize=(9.6, 4.2))

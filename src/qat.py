@@ -43,7 +43,9 @@ def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     args = build_parser().parse_args(argv)
     if not args.checkpoint.is_file():
-        raise SystemExit(f"missing checkpoint {args.checkpoint}. Train with src/train_cnn.py first.")
+        raise SystemExit(
+            f"missing checkpoint {args.checkpoint}. Train with src/train_cnn.py first."
+        )
     torch.manual_seed(args.seed)
     torch.set_num_threads(args.threads)
     backend = configure_static_backend(args.backend)

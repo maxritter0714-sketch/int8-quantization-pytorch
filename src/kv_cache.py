@@ -68,9 +68,7 @@ def kv_dims_from_config(config) -> tuple[int, int, int]:
     if layers < 1 or query_heads < 1 or kv_heads < 1 or hidden < 1:
         raise ValueError("config dimensions must be positive")
     if hidden % query_heads != 0:
-        raise ValueError(
-            f"hidden size {hidden} is not divisible by query heads {query_heads}"
-        )
+        raise ValueError(f"hidden size {hidden} is not divisible by query heads {query_heads}")
     return layers, kv_heads, hidden // query_heads
 
 
@@ -143,8 +141,7 @@ def measured_kv_cache_bytes(past_key_values) -> tuple[int, str]:
         tensors.append(tensor)
     total = sum(tensor.numel() * tensor.element_size() for tensor in tensors)
     shapes = "|".join(
-        f"{tuple(tensor.shape)}:{str(tensor.dtype).replace('torch.', '')}"
-        for tensor in tensors
+        f"{tuple(tensor.shape)}:{str(tensor.dtype).replace('torch.', '')}" for tensor in tensors
     )
     return total, shapes
 
@@ -277,8 +274,8 @@ def plot_kv_cache(rows: list[dict[str, object]], path: Path, model_name: str) ->
         return [by_len[seq] for seq in seqs]
 
     by_len = {int(row["seq_len"]): row for row in rows}
-    theoretical_mb = [int(by_len[seq]["theoretical_kv_bytes"]) / (1024.0 ** 2) for seq in seqs]
-    measured_mb = [int(by_len[seq]["measured_kv_bytes"]) / (1024.0 ** 2) for seq in seqs]
+    theoretical_mb = [int(by_len[seq]["theoretical_kv_bytes"]) / (1024.0**2) for seq in seqs]
+    measured_mb = [int(by_len[seq]["measured_kv_bytes"]) / (1024.0**2) for seq in seqs]
 
     fig, axes = plt.subplots(1, 2, figsize=(9.6, 4.2))
     axes[0].plot(seqs, tokens_per_sec(True), marker="o", label="use_cache=True")
