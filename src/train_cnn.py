@@ -18,6 +18,7 @@ from pathlib import Path
 
 import torch
 
+from benchmark import write_csv
 from cifar10 import load_cifar10
 from cnn_quantize import (
     build_rows,
@@ -28,7 +29,6 @@ from cnn_quantize import (
     static_ptq,
     train_fp32,
 )
-from benchmark import write_csv
 from models.cnn import SmallCNN
 
 LOG = logging.getLogger("train_cnn")

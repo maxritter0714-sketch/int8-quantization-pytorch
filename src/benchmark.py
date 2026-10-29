@@ -15,10 +15,10 @@ import platform
 import statistics
 import tempfile
 import time
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterator
 
 import torch
 

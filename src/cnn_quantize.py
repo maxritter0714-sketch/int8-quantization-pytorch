@@ -13,14 +13,14 @@ from __future__ import annotations
 
 import copy
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from benchmark import hardware_info, measure_cpu_latency, state_dict_size_mb, write_csv
+from benchmark import hardware_info, measure_cpu_latency, state_dict_size_mb
 from cifar10 import maybe_flip_horizontal, minibatches
 from models.cnn import SmallCNN, count_parameters
 
@@ -270,7 +270,7 @@ def build_rows(
     train_batch_size: int,
 ) -> list[dict[str, object]]:
     hardware = hardware_info()
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     batches = latency_inputs(test_images, batch_sizes)
     parameters = count_parameters(SmallCNN())
     rows: list[dict[str, object]] = []

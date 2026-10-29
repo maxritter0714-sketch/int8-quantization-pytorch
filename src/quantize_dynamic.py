@@ -3,8 +3,9 @@
 Dynamic PTQ uses ``torch.ao.quantization.quantize_dynamic`` on ``nn.Linear``
 only. Embeddings and layer norms stay FP32, so the on-disk model shrinks by
 less than 4x. Latency is measured on synthetic token ids of a fixed length
-(batch 1 and 32 by default), not on the SST-2 sentences. Accuracy is argmax accuracy on the GLUE SST-2 validation split from
-``nyu-mll/glue`` (the bare ``glue`` id is no longer a valid Hub repo id).
+(batch 1 and 32 by default), not on the SST-2 sentences. Accuracy is argmax
+accuracy on the GLUE SST-2 validation split from ``nyu-mll/glue`` (the bare
+``glue`` id is no longer a valid Hub repo id).
 
 ``--limit`` keeps the first N labeled validation rows. That prefix is
 comparable across runs and is not a random sample of the full split.
@@ -16,7 +17,7 @@ import argparse
 import copy
 import gc
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import torch
@@ -131,7 +132,7 @@ def classification_accuracy(
             )
             logits = model(**encoded).logits
             predictions = logits.argmax(dim=-1).tolist()
-            for prediction, label in zip(predictions, labels):
+            for prediction, label in zip(predictions, labels, strict=True):
                 if label < 0:
                     continue
                 seen += 1
@@ -258,7 +259,7 @@ def main(argv: list[str] | None = None) -> None:
         for batch_size in args.batch_sizes
     }
     hardware = hardware_info()
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     rows: list[dict[str, object]] = []
 
     def record(model: nn.Module, method: str, accuracy: float, correct: int, seen: int) -> None:
