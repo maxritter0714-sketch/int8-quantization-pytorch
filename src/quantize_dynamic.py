@@ -46,8 +46,7 @@ def configure_quantized_engine() -> str:
             torch.backends.quantized.engine = name
             return name
     raise RuntimeError(
-        "No CPU quantized engine is available for dynamic INT8. "
-        f"supported_engines={supported}."
+        f"No CPU quantized engine is available for dynamic INT8. supported_engines={supported}."
     )
 
 

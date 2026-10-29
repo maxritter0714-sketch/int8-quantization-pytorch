@@ -225,7 +225,9 @@ def iter_windows(token_ids: torch.Tensor, seq_len: int) -> list[torch.Tensor]:
     return [windows[index : index + 1].contiguous() for index in range(windows.shape[0])]
 
 
-def evaluate_windows(model, windows: list[torch.Tensor], *, quantize_cache: bool) -> dict[str, float | int | str]:
+def evaluate_windows(
+    model, windows: list[torch.Tensor], *, quantize_cache: bool
+) -> dict[str, float | int | str]:
     total_nll = 0.0
     total_count = 0
     oneshot_total = 0.0
@@ -268,10 +270,12 @@ def plot_int8_cache(rows: list[dict[str, object]], path: Path) -> None:
     fp32_mb = []
     int8_mb = []
     for row in rows:
-        labels.append("FP32 cache" if row["quantize_cache"] == "none" else "Per-head INT8 round trip")
+        labels.append(
+            "FP32 cache" if row["quantize_cache"] == "none" else "Per-head INT8 round trip"
+        )
         perplexities.append(float(row["perplexity"]))
-        fp32_mb.append(int(row["fp32_cache_bytes"]) / (1024.0 ** 2))
-        int8_mb.append(int(row["int8_storage_bytes"]) / (1024.0 ** 2))
+        fp32_mb.append(int(row["fp32_cache_bytes"]) / (1024.0**2))
+        int8_mb.append(int(row["int8_storage_bytes"]) / (1024.0**2))
 
     fig, axes = plt.subplots(1, 2, figsize=(9.6, 4.2))
     axes[0].bar(labels, perplexities, color=["#4c78a8", "#f58518"])
@@ -350,7 +354,9 @@ def main(argv: list[str] | None = None) -> None:
                 "predicted_tokens": stats["tokens"],
                 "perplexity": round(float(stats["perplexity"]), 4),
                 "oneshot_perplexity": (
-                    round(float(stats["oneshot_perplexity"]), 4) if stats["oneshot_perplexity"] != "" else ""
+                    round(float(stats["oneshot_perplexity"]), 4)
+                    if stats["oneshot_perplexity"] != ""
+                    else ""
                 ),
                 "fp32_cache_bytes": stats["fp32_cache_bytes"],
                 "int8_storage_bytes": stats["int8_storage_bytes"],
