@@ -1,1 +1,5 @@
-"""Model definitions. The CNN is a week-2 stub."""
+"""Model definitions."""
+
+from .cnn import SmallCNN, count_parameters
+
+__all__ = ["SmallCNN", "count_parameters"]

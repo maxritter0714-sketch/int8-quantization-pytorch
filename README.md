@@ -1,12 +1,12 @@
+[![pytest](https://github.com/maxritter0714-sketch/int8-quantization-pytorch/actions/workflows/pytest.yml/badge.svg)](https://github.com/maxritter0714-sketch/int8-quantization-pytorch/actions/workflows/pytest.yml)
+
 # INT8 quantization with PyTorch
 
-A small, reproducible measurement project: how dynamic INT8 quantization changes on-disk size, CPU latency, and accuracy for a finetuned DistilBERT, and how a KV cache trades memory for decode speed on a small GPT-2.
-
-The numbers below come from one machine and one command each. They are not a leaderboard. Dynamic quantization often shrinks a checkpoint more reliably than it speeds up CPU inference. On the host used here it did both; that speedup is tied to this CPU and is not something to assume elsewhere.
+Smaller checkpoints and KV caches are only useful if accuracy and CPU latency survive the conversion. This repository measures that, on one machine, for a finetuned DistilBERT, a small CIFAR-10 CNN, and DistilGPT-2. The numbers below are from the commands in this file. They are not a leaderboard, and a speedup on this CPU is not a property of INT8 in general.
 
 ## Setup
 
-Python 3.11. The CI workflow installs this file on `ubuntu-latest` (CPU). The run recorded below used CPython 3.11.18.
+Python 3.11. CI runs `pytest` on `ubuntu-latest` with the CPU wheel. The measurements used CPython 3.11.18.
 
 ```bash
 python3.11 -m venv .venv
@@ -15,126 +15,85 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-`requirements.txt` pulls the CPU wheel of PyTorch (`torch==2.15.0+cpu`) from the PyTorch wheel index, plus pinned `transformers`, `datasets`, `matplotlib`, and `pytest`. Run the scripts from the repository root so `src/` is on the import path.
+Run every script from the repository root.
 
 ## Reproduce
 
-### DistilBERT, FP32 vs dynamic INT8
-
-Model: `distilbert-base-uncased-finetuned-sst-2-english`.
-
-`torch.ao.quantization.quantize_dynamic` replaces `nn.Linear` with dynamic INT8 (weights stored as integers, activations quantized at runtime). Embeddings and layer norms stay FP32. Accuracy is argmax accuracy on the GLUE SST-2 validation split from `nyu-mll/glue` (872 labeled rows). The bare Hub id `glue` is no longer accepted by current `huggingface_hub`. `--limit N` scores only the first N rows of that split (a prefix, not a random sample). The committed CSV used the full split.
-
-Latency uses synthetic token ids of length `--seq-len` (default 128) at batch sizes 1 and 32, after a warmup, with `torch.set_num_threads` pinned for the timed calls. Median and p90 are over those timed calls only.
-
 ```bash
-# Command that wrote results/distilbert_sst2_dynamic_int8.csv
+# DistilBERT, FP32 vs dynamic INT8. Full SST-2 validation (872 rows).
 python src/quantize_dynamic.py --threads 4 --warmup 10 --runs 40
 
-# Shorter accuracy prefix
-python src/quantize_dynamic.py --limit 256 --warmup 5 --runs 30 --threads 1
-```
-
-### KV cache
-
-Model: `distilgpt2` (or pass `--model sshleifer/tiny-gpt2`).
-
-For prompt lengths 32, 128, and 512 the script generates `--new-tokens` greedy tokens (default 16) with `use_cache=True` and `use_cache=False`, and records the median tokens/sec. Theoretical KV bytes at batch 1 are:
-
-```text
-2 * layers * kv_heads * head_dim * seq_len * bytes_per_value
-```
-
-For DistilGPT-2, `kv_heads` equals `n_head` (6 layers, 12 heads, head dim 64, FP32). The measured size is the key and value tensors in `past_key_values` after a prefill of that prompt length. Generated tokens are not included in the byte count. Shapes are stored in the CSV.
-
-```bash
-# Command that wrote results/kv_cache.csv and results/kv_cache.png
+# DistilGPT-2 decode, use_cache true vs false, prompt lengths 32 / 128 / 512.
 python src/kv_cache.py --threads 4
 
-python src/kv_cache.py --model sshleifer/tiny-gpt2 --new-tokens 8 --runs 3
-```
+# CIFAR-10 SmallCNN: train 4 epochs, static PTQ (256-image prefix), 1 epoch of QAT.
+python src/train_cnn.py --epochs 4 --qat-epochs 1 --calib-samples 256 --threads 4 --warmup 10 --runs 40
 
-### CNN static PTQ and QAT
+# Experiment: per-head INT8 round trip of the KV cache on a WikiText-2 prefix.
+python src/kv_cache_int8.py --threads 4 --seq-len 128 --max-tokens 512
 
-Not in this revision. `src/models/cnn.py`, `src/train_cnn.py`, `src/quantize_static.py`, and `src/qat.py` are stubs and raise `NotImplementedError`.
-
-### Tests
-
-```bash
 pytest
 ```
 
-Smoke tests build tiny local modules (including a random GPT-2 config). They do not download DistilBERT or DistilGPT-2. GitHub Actions runs `pytest` on push and pull request with Python 3.11 and the CPU wheel.
+`src/quantize_static.py` and `src/qat.py` reload `results/cnn_fp32.pt` (gitignored) if you want to repeat only one conversion. `--limit N` on the DistilBERT script scores a prefix of the validation split instead of all 872 rows.
 
 ## Results
 
-Recorded on 2026-10-29. The hypervisor only exposes the CPU as **Intel(R) Xeon(R) Processor** (no SKU), 4 logical CPUs, x86_64, Linux 6.12.94+. Flags present: `avx avx2 avx512f avx512_vnni avx_vnni fma amx_int8 amx_bf16`. Torch `2.15.0+cpu`, CPython 3.11.18. Quantized engine: `fbgemm`. Intra-op threads pinned to 4 for both scripts. The CSVs are the source of truth; the tables are rounded.
+Recorded on 2026-10-29. The guest CPU is reported as **Intel(R) Xeon(R) Processor** (no SKU), 4 logical CPUs, Linux 6.12.94+. Flags: `avx avx2 avx512f avx512_vnni avx_vnni fma amx_int8 amx_bf16`. Torch `2.15.0+cpu`, Python 3.11.18, `torch.set_num_threads(4)`. Dynamic INT8 used the `fbgemm` engine. CNN static PTQ and QAT used the `x86` qconfig. Median and p90 are wall-clock milliseconds after warmup. CSVs are the source of truth; the table is rounded.
 
-### DistilBERT SST-2
-
-Full validation split, 872 rows. Latency: synthetic token ids, sequence length 128, warmup 10, 40 timed runs.
-
-| Method | Size (MB) | Accuracy | Batch | Median (ms) | p90 (ms) |
+| Experiment | Method | Footprint | Quality | Batch 1 median (p90) | Batch 32 median (p90) |
 | --- | --- | --- | --- | --- | --- |
-| FP32 | 255.45 | 0.9106 (794/872) | 1 | 19.49 | 21.63 |
-| FP32 | 255.45 | 0.9106 (794/872) | 32 | 583.29 | 590.37 |
-| Dynamic INT8 | 132.29 | 0.9002 (785/872) | 1 | 11.47 | 12.89 |
-| Dynamic INT8 | 132.29 | 0.9002 (785/872) | 32 | 332.18 | 339.17 |
+| DistilBERT SST-2 | FP32 | 255.45 MB | 0.9106 acc (794/872) | 19.49 ms (21.63) | 583.29 ms (590.37) |
+| DistilBERT SST-2 | Dynamic INT8, `nn.Linear` | 132.29 MB | 0.9002 (785/872) | 11.47 ms (12.89) | 332.18 ms (339.17) |
+| SmallCNN CIFAR-10 | FP32, 4 epochs | 0.364 MB | 0.5735 (5735/10000) | 0.21 ms (0.25) | 2.71 ms (2.89) |
+| SmallCNN CIFAR-10 | Static PTQ, 256 calib | 0.102 MB | 0.5730 (5730/10000) | 0.22 ms (0.26) | 0.43 ms (0.51) |
+| SmallCNN CIFAR-10 | QAT, plus 1 epoch | 0.102 MB | 0.6051 (6051/10000) | 0.22 ms (0.24) | 0.42 ms (0.46) |
+| distilgpt2, prompt 512 | `use_cache=True` | 18.0 MB KV | — | 76.22 tokens/s | — |
+| distilgpt2, prompt 512 | `use_cache=False` | 18.0 MB KV | — | 10.89 tokens/s | — |
+| distilgpt2, WikiText-2 prefix | FP32 cache (experiment) | 4.50 MB at seq 128 | ppl 57.02 (508 tokens) | — | — |
+| distilgpt2, WikiText-2 prefix | Per-head INT8 round trip | 1.125 MB stored | ppl 57.35 | — | — |
 
-All 38 `nn.Linear` modules were converted. Embeddings stayed FP32, so the checkpoint went from 255.45 MB to 132.29 MB (1.93×), not 4×. Accuracy dropped by 9 examples (1.03 percentage points). On this CPU, median latency improved by 1.70× at batch 1 and 1.76× at batch 32. At batch 32, p90 is within about 2% of the median. At batch 1, p90 is about 11–12% above the median. That spread is smaller than the FP32–INT8 gap. Batch 32 takes about 30× the batch-1 wall time, so the per-example time barely changes at this sequence length.
+CIFAR-10 is used because the recorded `train_cnn.py` command finished in 62 seconds on this host once the dataset was in the Hugging Face cache, so falling back to MNIST was unnecessary. The network is three conv-relu-pool stages (32, 64, 128 channels), global average pooling, and a linear head: 94,538 parameters, no batch norm. Static PTQ is FX graph mode (`prepare_fx` / `convert_fx`). QAT is `prepare_qat_fx`, one fine-tune epoch, then `convert_fx`.
 
-### KV cache
+![SmallCNN accuracy and CPU latency](results/cnn_quantization.png)
 
-`distilgpt2`, greedy decode of 16 new tokens, warmup 2, 10 timed runs, batch 1. Theoretical and measured cache bytes match exactly at every length (FP32, shape `(1, 12, seq, 64)` per key and value tensor, 6 layers).
+![DistilGPT-2 KV-cache throughput and size](results/kv_cache.png)
 
-| Prompt length | use_cache | Median tokens/sec | Median ms | KV bytes | KV (MB) |
-| --- | --- | --- | --- | --- | --- |
-| 32 | true | 147.11 | 108.79 | 1,179,648 | 1.125 |
-| 32 | false | 78.39 | 204.11 | 1,179,648 | 1.125 |
-| 128 | true | 130.07 | 123.01 | 4,718,592 | 4.5 |
-| 128 | false | 40.53 | 394.76 | 4,718,592 | 4.5 |
-| 512 | true | 76.22 | 209.93 | 18,874,368 | 18.0 |
-| 512 | false | 10.89 | 1469.22 | 18,874,368 | 18.0 |
+![KV-cache INT8 round trip on a WikiText-2 prefix](results/kv_cache_int8.png)
 
-Cache bytes scale linearly with length (32 → 128 → 512 is ×4 each step, and so is the byte count). Decode without the cache falls off faster: at 512 tokens the cached run is about 7.0× the tokens/sec of the uncached run (76.22 vs 10.89). With the cache, tokens/sec still drops as the prompt grows, because each new token still attends over the stored keys and values.
+Cache bytes at prompt lengths 32, 128, and 512 were 1.125 MB, 4.5 MB, and 18.0 MB, and the measured tensors matched `2 * layers * heads * head_dim * seq_len * 4` exactly. Cached tokens/s at those lengths were 147.11, 130.07, and 76.22, against 78.39, 40.53, and 10.89 without the cache.
 
-![KV cache throughput and size for distilgpt2](results/kv_cache.png)
+## Takeaways
 
-## Methods
-
-- **On-disk size.** `torch.save` of the `state_dict`, then the file size in bytes. The zip container is included. Quantized linear weights are stored packed, so an INT8 checkpoint is smaller even though embeddings stay FP32.
-- **CPU latency.** Warmup, then N wall-clock calls under `torch.inference_mode` and a fixed `torch.set_num_threads`. Median and linear-interpolation p90. No GPU synchronization, because these runs are CPU-only.
-- **Accuracy.** SST-2 validation labels, argmax over the two logits. Unlabeled rows (`label < 0`) are skipped. `--limit` was not used for the table above.
-- **Dynamic INT8.** `quantize_dynamic(..., {nn.Linear}, dtype=torch.qint8)`. PyTorch marks this eager API as deprecated and points new work at torchao. The call is still the one this experiment reports. The process selects the first available engine among `fbgemm`, `x86`, `onednn`, and `qnnpack`.
-- **KV cache.** Greedy `generate` with `min_new_tokens=max_new_tokens`. Tokens/sec is the median of per-run rates (`new_tokens / seconds`). The theoretical size is the dense formula above; the measured size sums unique key/value tensor bytes after the prefill.
+- Dynamic INT8 cut DistilBERT from 255.45 MB to 132.29 MB (1.93×, not 4×, because the embedding stayed FP32) and missed 9 more SST-2 validation items. Median latency on this CPU improved 1.70× at batch 1 and 1.76× at batch 32. p90 stayed within a few percent of the median at batch 32, and about 11–12% above it at batch 1.
+- Static PTQ on the CNN cut the state dict 3.56× (0.364 MB to 0.102 MB) and lost 5 test images out of 10,000. Batch-1 latency did not improve (0.22 ms vs 0.21 ms). Batch-32 median latency fell from 2.71 ms to 0.43 ms (6.4×); p90 fell from 2.89 ms to 0.51 ms.
+- QAT landed at the same INT8 size and the same batch-32 speed, with test accuracy 0.6051 against 0.5735 for the 4-epoch FP32 model. That run is an extra fine-tune epoch. This table has no 5th FP32 epoch to separate "more training" from "quantization-aware training."
+- The KV cache grew linearly and, at 512 tokens, cached decode was 7.0× the tokens/s of recomputing the prefix (76.22 vs 10.89). Throughput still fell as the prompt grew, because each new token attends over the stored keys and values.
+- The INT8 cache result is an experiment, not a kernel. A symmetric per-head round trip changed perplexity from 57.02 to 57.35 on a 508-token WikiText-2 prefix (stepwise FP32 matched a one-shot forward at 57.02). The stored form would be 4.50 MB to 1.125 MB. The process still holds FP32 tensors after the round trip.
 
 ## Limitations
 
-- CPU only, and only small models (DistilBERT, about 66M parameters; DistilGPT-2, about 82M). Nothing here transfers automatically to a 7B model or to a GPU.
-- One KVM guest. The guest CPU string has no SKU. Median and p90 over 40 (DistilBERT) or 10 (KV cache) calls after warmup describe this run; they are not a multi-machine interval.
-- Dynamic PTQ does not guarantee a speedup. It quantizes activations on every linear call, and that overhead can cancel a cheaper integer GEMM. This host advertises AVX-512 VNNI and AMX-INT8, and here INT8 was faster as well as smaller. On a CPU without a fast INT8 path, the same conversion can mainly reduce the file size. Read the latency columns as measurements of one CPU, not as a property of INT8.
-- The size win is capped by whatever is left in FP32. Here that is mostly the embedding table.
-- `--limit` is a prefix of the validation split. The committed accuracy number does not use it. A prefix is comparable across two methods in the same run and is not a confidence interval for the full split.
-- The KV formula assumes a dense cache, batch 1, and the weight dtype's byte width. On this DistilGPT-2 run the measured tensors matched that formula. If `cache_shapes` shows a longer allocation or another dtype, the byte counts will differ, and that difference is the result.
-- Static PTQ, QAT, and the CNN are not implemented yet.
-
-## Next steps
-
-- Train the small CNN and add static PTQ (calibration, FX or torchao PT2E, `fbgemm` / `x86`), then the same size, latency, and accuracy columns.
-- Optional QAT, and a short perplexity check if cache values are rounded to INT8.
-- A notebook that only reads the CSVs already written here.
+- CPU only, and only small models (DistilBERT, a 95k-parameter CNN, DistilGPT-2). Nothing here transfers to a 7B model or a GPU by itself.
+- One KVM guest. The CPU string has no SKU. Medians and p90s describe these runs.
+- Dynamic and static INT8 do not guarantee a speedup. The CNN's batch-1 result is the counterexample: the integer conv did not pay for its overhead. The DistilBERT speedup showed up on a host that advertises AVX-512 VNNI and AMX-INT8.
+- QAT accuracy is not a pure INT8-versus-FP32 comparison. The fine-tune is an extra epoch.
+- Calibration is the first 256 training images, not a random draw. CIFAR-10 accuracy is modest because the network is small and trained for four epochs.
+- The KV INT8 path dequantizes back to FP32 before the next attention call. It measures numeric damage and a hypothetical storage size. It does not measure an INT8 attention kernel.
+- `torch.ao.quantization` (`quantize_dynamic`, `prepare_fx`, `convert_fx`, `prepare_qat_fx`) is the API these scripts call. Current PyTorch marks it deprecated and points new work at torchao.
 
 ## Layout
 
 ```text
 src/benchmark.py          size, latency, hardware, CSV
 src/quantize_dynamic.py   DistilBERT FP32 vs dynamic INT8
-src/kv_cache.py           use_cache and theoretical vs measured KV bytes
-src/models/cnn.py         week-2 stub
-src/train_cnn.py          week-2 stub
-src/quantize_static.py    week-2 stub
-src/qat.py                week-2 stub
-tests/                    pytest smoke tests, no large downloads
-results/                  CSV and PNG written by the scripts
-.github/workflows/pytest.yml
+src/kv_cache.py           use_cache throughput and measured KV bytes
+src/kv_cache_int8.py      per-head INT8 round trip, WikiText-2 perplexity
+src/models/cnn.py         SmallCNN
+src/cifar10.py            CIFAR-10 tensors from uoft-cs/cifar10
+src/train_cnn.py          train, static PTQ, QAT, CSV, plot
+src/quantize_static.py    static PTQ from a saved FP32 checkpoint
+src/qat.py                QAT fine-tune from a saved FP32 checkpoint
+src/cnn_quantize.py       FX prepare/convert helpers
+tests/                    pytest, no checkpoint downloads
+results/                  CSVs and PNGs from the commands above
 ```
