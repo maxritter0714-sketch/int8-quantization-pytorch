@@ -13,9 +13,9 @@ from pathlib import Path
 
 import torch
 
+from benchmark import state_dict_size_mb
 from cifar10 import load_cifar10
 from cnn_quantize import classification_accuracy, configure_static_backend, load_fp32, static_ptq
-from benchmark import state_dict_size_mb
 
 LOG = logging.getLogger("quantize_static")
 

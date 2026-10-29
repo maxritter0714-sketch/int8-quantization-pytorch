@@ -20,7 +20,7 @@ from __future__ import annotations
 import argparse
 import logging
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import torch
@@ -133,7 +133,8 @@ def apply_int8_roundtrip(past_key_values, *, per_head: bool = True):
         return tuple(rebuilt), total
 
     raise TypeError(
-        f"Unrecognized past_key_values type: {type(past_key_values)!r}. Cannot round-trip the KV cache."
+        f"Unrecognized past_key_values type: {type(past_key_values)!r}. "
+        "Cannot round-trip the KV cache."
     )
 
 
@@ -329,7 +330,7 @@ def main(argv: list[str] | None = None) -> None:
     windows = iter_windows(token_ids, args.seq_len)
     LOG.info("dataset=%s windows=%s seq_len=%s", source, len(windows), args.seq_len)
     hardware = hardware_info()
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     rows = []
     for quantize_cache, label in ((False, "none"), (True, "per_head_int8")):
         LOG.info("evaluating quantize_cache=%s", label)

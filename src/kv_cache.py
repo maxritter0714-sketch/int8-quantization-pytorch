@@ -22,7 +22,7 @@ import argparse
 import logging
 import statistics
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import torch
@@ -244,7 +244,9 @@ def benchmark_sequence(
                 raise RuntimeError("generation produced no new tokens")
             samples_ms.append(elapsed_ms)
             produced.append(new_count)
-    rates = [count / (elapsed / 1000.0) for count, elapsed in zip(produced, samples_ms)]
+    rates = [
+        count / (elapsed / 1000.0) for count, elapsed in zip(produced, samples_ms, strict=True)
+    ]
     return {
         "median_ms": round(float(statistics.median(samples_ms)), 4),
         "p90_ms": round(percentile(samples_ms, 90), 4),
@@ -314,7 +316,7 @@ def run_kv_experiment(
     layers, kv_heads, head_dim = kv_dims_from_config(model.config)
     bytes_per_value = parameter_element_size(model)
     hardware = hardware_info()
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     rows: list[dict[str, object]] = []
 
     for seq_len in sorted(prompts):
