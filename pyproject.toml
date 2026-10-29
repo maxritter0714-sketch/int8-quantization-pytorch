@@ -1,0 +1,41 @@
+[project]
+name = "int8-quantization-pytorch"
+version = "0.1.0"
+description = "Measure FP32 versus INT8 size, CPU latency, and accuracy in PyTorch."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Max Ritter" }]
+# Runtime install is `pip install -r requirements.txt`, which selects the CPU
+# torch wheel. These pins match that file. Torch itself stays in
+# requirements.txt because the +cpu build comes from the PyTorch wheel index.
+dependencies = [
+    "transformers==5.15.0",
+    "datasets==5.1.0",
+    "matplotlib==3.11.2",
+    "pytest==9.2.0",
+]
+
+[project.optional-dependencies]
+dev = ["ruff==0.17.3"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = [
+    "ignore:torch.ao.quantization is deprecated:DeprecationWarning",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.format]
+quote-style = "double"
+docstring-code-format = false
