@@ -4,6 +4,8 @@
 
 Smaller checkpoints and KV caches are only useful if accuracy and CPU latency survive the conversion. This repository measures that, on one machine, for a finetuned DistilBERT, a small CIFAR-10 CNN, and DistilGPT-2. The numbers below are from the commands in this file. They are not a leaderboard, and a speedup on this CPU is not a property of INT8 in general.
 
+Longer write-ups, with the same numbers: [methodology](docs/methodology.md), [results](docs/results.md), [design decisions](docs/design-decisions.md), and [reproduction](docs/reproduction.md).
+
 ## Setup
 
 Python 3.11. CI runs `pytest` on `ubuntu-latest` with the CPU wheel. The measurements used CPython 3.11.18.
@@ -33,6 +35,7 @@ python src/train_cnn.py --epochs 4 --qat-epochs 1 --calib-samples 256 --threads 
 python src/kv_cache_int8.py --threads 4 --seq-len 128 --max-tokens 512
 
 pytest
+ruff check src tests && ruff format --check src tests
 ```
 
 `src/quantize_static.py` and `src/qat.py` reload `results/cnn_fp32.pt` (gitignored) if you want to repeat only one conversion. `--limit N` on the DistilBERT script scores a prefix of the validation split instead of all 872 rows.
@@ -84,16 +87,13 @@ Cache bytes at prompt lengths 32, 128, and 512 were 1.125 MB, 4.5 MB, and 18.0 M
 ## Layout
 
 ```text
+docs/                     methodology, results, decisions, reproduction
 src/benchmark.py          size, latency, hardware, CSV
-src/quantize_dynamic.py   DistilBERT FP32 vs dynamic INT8
-src/kv_cache.py           use_cache throughput and measured KV bytes
-src/kv_cache_int8.py      per-head INT8 round trip, WikiText-2 perplexity
+src/quantize_dynamic.py   DistilBERT CLI (helpers in dynamic_int8.py, sst2_eval.py)
+src/kv_cache.py           KV-cache CLI (helpers in kv_cache_size.py, kv_cache_generate.py)
+src/kv_cache_int8.py      INT8 round-trip CLI (kv_cache_roundtrip.py, kv_cache_perplexity.py)
 src/models/cnn.py         SmallCNN
-src/cifar10.py            CIFAR-10 tensors from uoft-cs/cifar10
 src/train_cnn.py          train, static PTQ, QAT, CSV, plot
-src/quantize_static.py    static PTQ from a saved FP32 checkpoint
-src/qat.py                QAT fine-tune from a saved FP32 checkpoint
-src/cnn_quantize.py       FX prepare/convert helpers
 tests/                    pytest, no checkpoint downloads
 results/                  CSVs and PNGs from the commands above
 ```
