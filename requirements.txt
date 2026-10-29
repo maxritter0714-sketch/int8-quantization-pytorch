@@ -1,0 +1,10 @@
+# CPU-only stack for Python 3.11.
+# The +cpu torch build is published on the PyTorch wheel index, not as the
+# default (often CUDA) torch wheel on PyPI.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+torch==2.15.0+cpu
+transformers==5.15.0
+datasets==5.1.0
+matplotlib==3.11.2
+pytest==9.2.0
